@@ -1,0 +1,70 @@
+X_true = ads_df[:, :-1]  # Features of real data
+y_true = ads_df[:, -1]   # Labels of real data
+X_fake = newgen[:, :-1]  # Features of synthetic data
+y_fake = newgen[:, -1]   # Labels of synthetic data
+
+nn = NearestNeighbors(n_neighbors=2)
+nn.fit(X_true)
+distances, _ = nn.kneighbors(X_fake)
+nndr = distances[:, 1] / distances[:, 0]
+average_nndr = np.mean(nndr)
+print(f"Average NNDR: {average_nndr}")
+
+X_train, X_holdout = train_test_split(X_true, test_size=0.3, random_state=42)
+nn_train = NearestNeighbors(n_neighbors=2)
+nn_train.fit(X_train)
+distances_train, _ = nn_train.kneighbors(X_fake)
+distances_holdout, _ = nn_train.kneighbors(X_holdout)
+nndr_train = distances_train[:, 1] / distances_train[:, 0]
+nndr_holdout = distances_holdout[:, 1] / distances_holdout[:, 0]
+privacy_loss = np.abs(np.mean(nndr_train) - np.mean(nndr_holdout))
+print(f"Privacy Loss: {privacy_loss}")
+
+distances = pairwise_distances(X_fake, X_true)
+min_distances = np.min(distances, axis=1)
+real_distances = pairwise_distances(X_true, X_true)
+np.fill_diagonal(real_distances, np.inf)
+min_real_distances = np.min(real_distances, axis=1)
+dcr = np.median(min_distances) / np.median(min_real_distances)
+print(f"Median DCR: {dcr}")
+
+threshold = 0.01
+hits = (distances < threshold).sum(axis=0)
+hitting_rate = hits.sum() / X_true.shape[0]
+print(f"Hitting Rate: {hitting_rate}")
+
+def kl_divergence(p, q):
+    p = np.clip(p, 1e-10, None)
+    q = np.clip(q, 1e-10, None)
+    return entropy(p, q)
+
+bins = 50
+kl_values = []
+for i in range(X_true.shape[1]):
+    p, _ = np.histogram(X_true[:, i], bins=bins, density=True)
+    q, _ = np.histogram(X_fake[:, i], bins=bins, density=True)
+    kl_values.append(kl_divergence(p, q))
+average_kl = np.mean(kl_values)
+print(f"Average KL Divergence: {average_kl}")
+
+from scipy.stats import wasserstein_distance
+
+emd_values = []
+for i in range(X_true.shape[1]):
+    emd = wasserstein_distance(X_true[:, i], X_fake[:, i])
+    emd_values.append(emd)
+average_emd = np.mean(emd_values)
+print(f"Average Earth Mover's Distance (EMD): {average_emd}")
+
+def hellinger_distance(p, q):
+    p = np.clip(p, 1e-10, None)
+    q = np.clip(q, 1e-10, None)
+    return np.sqrt(0.5 * np.sum((np.sqrt(p) - np.sqrt(q)) ** 2))
+
+hellinger_values = []
+for i in range(X_true.shape[1]):
+    p, _ = np.histogram(X_true[:, i], bins=bins, density=True)
+    q, _ = np.histogram(X_fake[:, i], bins=bins, density=True)
+    hellinger_values.append(hellinger_distance(p, q))
+average_hellinger = np.mean(hellinger_values)
+print(f"Average Hellinger Distance: {average_hellinger}")
